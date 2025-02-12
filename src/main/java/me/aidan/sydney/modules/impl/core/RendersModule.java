@@ -2,6 +2,7 @@ package me.aidan.sydney.modules.impl.core;
 
 import me.aidan.sydney.modules.Module;
 import me.aidan.sydney.modules.RegisterModule;
+import me.aidan.sydney.settings.impl.BooleanSetting;
 import me.aidan.sydney.settings.impl.ColorSetting;
 import me.aidan.sydney.settings.impl.ModeSetting;
 import me.aidan.sydney.settings.impl.NumberSetting;
@@ -16,6 +17,7 @@ public class RendersModule extends Module {
     public ModeSetting renderMode = new ModeSetting("RenderMode", "The rendering that will be applied to the blocks highlighted.", "Both", new String[]{"Fill", "Outline", "Both"});
     public ColorSetting fillColor = new ColorSetting("FillColor", "The color used for the fill rendering.", new ModeSetting.Visibility(renderMode, "Fill", "Both"), ColorUtils.getDefaultFillColor());
     public ColorSetting outlineColor = new ColorSetting("OutlineColor", "The color used for the outline rendering.", new ModeSetting.Visibility(renderMode, "Outline", "Both"), ColorUtils.getDefaultOutlineColor());
+    public BooleanSetting debug = new BooleanSetting("Debug Mode", "Things for developers",false);
 
     public Color getColor(String mode, Color color, float scale) {
         if(mode.equalsIgnoreCase("Fade")) return ColorUtils.getColor(color, (int) (color.getAlpha() * scale));

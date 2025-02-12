@@ -25,6 +25,7 @@ import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class RenderManager implements IMinecraft {
@@ -63,6 +64,31 @@ public class RenderManager implements IMinecraft {
         }
 
         renderPositions.removeIf(p -> p.get() <= 0);
+    }
+    @SubscribeEvent // why is there a $
+    public void onRenderWorld$blacklistedBedrock(RenderWorldEvent event) {
+        if (mc.player == null || mc.world == null || AutoCrystalModule.blacklistedBedrock.isEmpty()) return;
+        RendersModule rendersModule = Sydney.MODULE_MANAGER.getModule(RendersModule.class);
+        if (!rendersModule.debug.getValue()) return;
+        Color color = new Color(255, 0, 0, 100);
+        ArrayList<BlockPos> positions = new ArrayList<>(AutoCrystalModule.blacklistedBedrock);
+        for (BlockPos pos : positions) {
+            Box box = new Box(pos);
+
+            if (rendersModule.mode.getValue().equals("Shrink")) {
+                box = new Box(pos).contract(0.5).expand(0.25);
+            }
+
+            if (rendersModule.renderMode.getValue().equalsIgnoreCase("Fill") ||
+                    rendersModule.renderMode.getValue().equalsIgnoreCase("Both")) {
+                Renderer3D.renderBox(event.getMatrices(), box, color);
+            }
+
+            if (rendersModule.renderMode.getValue().equalsIgnoreCase("Outline") ||
+                    rendersModule.renderMode.getValue().equalsIgnoreCase("Both")) {
+                Renderer3D.renderBoxOutline(event.getMatrices(), box, color);
+            }
+        }
     }
 
     @SubscribeEvent

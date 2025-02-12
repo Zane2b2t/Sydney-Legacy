@@ -130,6 +130,7 @@ public class AutoCrystalModule extends Module {
     private final Map<Integer, Long> attackedCrystals = new ConcurrentHashMap<>();
     private final Map<BlockPos, Long> placedCrystals = new ConcurrentHashMap<>();
     private final Map<BlockPos, Long> countedCrystals = new ConcurrentHashMap<>();
+    public static final ArrayList<BlockPos> blacklistedBedrock = new ArrayList<>();
 
     private final Timer attackTimer = new Timer();
     private final Timer placeTimer = new Timer();
@@ -384,7 +385,7 @@ public class AutoCrystalModule extends Module {
         attackedCrystals.clear();
         placedCrystals.clear();
         countedCrystals.clear();
-
+        blacklistedBedrock.clear();
         attackedSequentially = false;
         placedSequentially = false;
 
@@ -591,11 +592,10 @@ public class AutoCrystalModule extends Module {
 
         return optimalCrystal;
     }
-
     private PlaceTarget calculatePlacements(BlockPos exception) {
         if (!place.getValue()) return null;
-
-        if (shouldPause("Place") || ((autoSwitch.getValue().equalsIgnoreCase("None") || InventoryUtils.findHotbar(Items.END_CRYSTAL) == -1) && (mc.player.getMainHandStack().getItem() != Items.END_CRYSTAL && mc.player.getOffHandStack().getItem() != Items.END_CRYSTAL)))
+        if (shouldPause("Place") || ((autoSwitch.getValue().equalsIgnoreCase("None") || InventoryUtils.findHotbar(Items.END_CRYSTAL) == -1) &&
+                (mc.player.getMainHandStack().getItem() != Items.END_CRYSTAL && mc.player.getOffHandStack().getItem() != Items.END_CRYSTAL)))
             return null;
 
         List<PlayerEntity> players = getPlayers();
@@ -605,16 +605,23 @@ public class AutoCrystalModule extends Module {
         PlayerEntity optimalPlayer = null;
         List<Entity> obstructions = new ArrayList<>();
         float optimalDamage = 0.0f;
-
         int calculations = 0;
 
         for (int i = 0; i < Sydney.WORLD_MANAGER.getRadius(Math.max(placeRange.getValue().doubleValue(), placeWallsRange.getValue().doubleValue())); i++) {
             BlockPos position = mc.player.getBlockPos().add(Sydney.WORLD_MANAGER.getOffset(i));
-
+            if (blacklistedBedrock.contains(position)) continue;
             if (mc.player.getEyePos().squaredDistanceTo(Vec3d.ofCenter(position)) > MathHelper.square(placeRange.getValue().doubleValue())) continue;
             if (!mc.world.getWorldBorder().contains(position)) continue;
-            if (mc.world.getBlockState(position).getBlock() != Blocks.OBSIDIAN && mc.world.getBlockState(position).getBlock() != Blocks.BEDROCK) continue;
-            if (!mc.world.getBlockState(position.add(0, 1, 0)).isAir() || (placements.getValue().equalsIgnoreCase("Protocol") && !mc.world.getBlockState(position.add(0, 2, 0)).isAir())) continue;
+            if (mc.world.getBlockState(position).getBlock() != Blocks.BEDROCK && mc.world.getBlockState(position).getBlock() != Blocks.OBSIDIAN)
+                continue;
+            if (!mc.world.getBlockState(position.add(0, 1, 0)).isAir() ||
+                    (placements.getValue().equalsIgnoreCase("Protocol") && !mc.world.getBlockState(position.add(0, 2, 0)).isAir())) {
+                // If it's always impossible to place on, there's no need to waste resources checking it every tick, ignore.
+                if (mc.world.getBlockState(position).getBlock() == Blocks.BEDROCK) {
+                    blacklistedBedrock.add(position);
+                }
+                continue;
+            }
 
             if (!WorldUtils.canSee(position) && (raytrace.getValue() || mc.player.getEyePos().squaredDistanceTo(Vec3d.ofCenter(position)) > MathHelper.square(placeWallsRange.getValue().doubleValue()))) continue;
             if (mc.world.getOtherEntities(null, new Box(position.add(0, 1, 0))).stream().anyMatch(entity -> entity.isAlive() && !(entity instanceof ExperienceOrbEntity) && !(entity instanceof EndCrystalEntity))) continue;
@@ -644,18 +651,10 @@ public class AutoCrystalModule extends Module {
                     optimalPosition = position;
                     optimalPlayer = player;
                     optimalDamage = damage;
-
-                    if (damage > player.getHealth() + player.getAbsorptionAmount()) {
-                        override = true;
-                        break;
-                    }
                 }
             }
-
-            if (override) break;
         }
 
-        if (optimalPosition == null) return new PlaceTarget(null, null, obstructions, null, 0.0f, calculations);
         return new PlaceTarget(optimalPosition, optimalPlayer, obstructions, exception, optimalDamage, calculations);
     }
 

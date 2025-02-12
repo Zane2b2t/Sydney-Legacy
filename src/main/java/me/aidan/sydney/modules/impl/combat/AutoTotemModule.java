@@ -7,6 +7,7 @@ import me.aidan.sydney.events.impl.PlayerUpdateEvent;
 import me.aidan.sydney.events.impl.TickEvent;
 import me.aidan.sydney.modules.Module;
 import me.aidan.sydney.modules.RegisterModule;
+import me.aidan.sydney.modules.impl.movement.HoleSnapModule;
 import me.aidan.sydney.modules.impl.player.SpeedMineModule;
 import me.aidan.sydney.settings.impl.BooleanSetting;
 import me.aidan.sydney.settings.impl.ModeSetting;
@@ -24,6 +25,7 @@ import net.minecraft.util.math.MathHelper;
 public class AutoTotemModule extends Module {
     public ModeSetting item = new ModeSetting("Item", "The item that will be placed in your offhand slot when safety conditions are met.", "Totem", new String[]{"Totem", "Crystal", "Gapple"});
     public NumberSetting health = new NumberSetting("Health", "The health at which a totem will be prioritized.", new ModeSetting.Visibility(item, "Crystal", "Gapple"), 16, 0, 36);
+    public NumberSetting holeHealth = new NumberSetting("HoleHealth", "The health at which a totem will be prioritized (this overrides in a hole)", new ModeSetting.Visibility(item, "Crystal", "Gapple"), 16, 0, 36);
     public BooleanSetting elytraCheck = new BooleanSetting("ElytraCheck", "Prioritizes a totem whenever you're wearing an elytra.", true);
     public NumberSetting fallDistance = new NumberSetting("FallDistance", "The fall distance at which the module will prioritize a totem.", 20.0f, 0.0f, 80.0f);
     public BooleanSetting useGapple = new BooleanSetting("UseGapple", "Switches to a golden apple in your offhand when holding right click and holding a sword.", true);
@@ -119,7 +121,8 @@ public class AutoTotemModule extends Module {
     private boolean needsTotem() {
         if (Sydney.MODULE_MANAGER.getModule(SuicideModule.class).isToggled() && Sydney.MODULE_MANAGER.getModule(SuicideModule.class).offhandOverride.getValue()) return false;
 
-        if (mc.player.getHealth() + mc.player.getAbsorptionAmount() <= health.getValue().floatValue()) return true;
+        if (mc.player.getHealth() + mc.player.getAbsorptionAmount() <= (HoleSnapModule.isInHole() ? holeHealth.getValue().floatValue() : health.getValue().floatValue())) return true;
+
         if (mc.player.fallDistance > fallDistance.getValue().floatValue()) return true;
         if (elytraCheck.getValue() && mc.player.getEquippedStack(EquipmentSlot.CHEST).getItem() == Items.ELYTRA) return true;
 

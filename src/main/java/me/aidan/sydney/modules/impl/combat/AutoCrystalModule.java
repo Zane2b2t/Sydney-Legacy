@@ -614,8 +614,8 @@ public class AutoCrystalModule extends Module {
             if (!mc.world.getWorldBorder().contains(position)) continue;
             if (mc.world.getBlockState(position).getBlock() != Blocks.BEDROCK && mc.world.getBlockState(position).getBlock() != Blocks.OBSIDIAN)
                 continue;
-            if (!mc.world.getBlockState(position.add(0, 1, 0)).isAir() ||
-                    (placements.getValue().equalsIgnoreCase("Protocol") && !mc.world.getBlockState(position.add(0, 2, 0)).isAir())) {
+            if (!mc.world.getBlockState(position.up()).isAir() ||
+                    (placements.getValue().equalsIgnoreCase("Protocol") && !mc.world.getBlockState(position.up(2)).isAir())) {
                 // If it's always impossible to place on, there's no need to waste resources checking it every tick, ignore.
                 if (mc.world.getBlockState(position).getBlock() == Blocks.BEDROCK) {
                     blacklistedBedrock.add(position);
@@ -624,9 +624,9 @@ public class AutoCrystalModule extends Module {
             }
 
             if (!WorldUtils.canSee(position) && (raytrace.getValue() || mc.player.getEyePos().squaredDistanceTo(Vec3d.ofCenter(position)) > MathHelper.square(placeWallsRange.getValue().doubleValue()))) continue;
-            if (mc.world.getOtherEntities(null, new Box(position.add(0, 1, 0))).stream().anyMatch(entity -> entity.isAlive() && !(entity instanceof ExperienceOrbEntity) && !(entity instanceof EndCrystalEntity))) continue;
+            if (mc.world.getOtherEntities(null, new Box(position.up())).stream().anyMatch(entity -> entity.isAlive() && !(entity instanceof ExperienceOrbEntity) && !(entity instanceof EndCrystalEntity))) continue;
 
-            List<Entity> obstructingCrystals = mc.world.getOtherEntities(null, new Box(position.add(0, 1, 0))).stream().filter(entity -> entity instanceof EndCrystalEntity crystal && crystal.age >= (20 - attackSpeed.getValue().intValue()) + 15).toList();
+            List<Entity> obstructingCrystals = mc.world.getOtherEntities(null, new Box(position.up())).stream().filter(entity -> entity instanceof EndCrystalEntity crystal && crystal.age >= (20 - attackSpeed.getValue().intValue()) + 15).toList();
 
             if (!Sydney.MODULE_MANAGER.getModule(SuicideModule.class).isToggled()) {
                 float selfDamage = DamageUtils.getCrystalDamage(mc.player, null, position, exception, ignoreTerrain.getValue());

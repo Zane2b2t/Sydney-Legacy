@@ -6,6 +6,7 @@ import me.aidan.sydney.events.impl.PlayerMoveEvent;
 import me.aidan.sydney.mixins.accessors.Vec3dAccessor;
 import me.aidan.sydney.modules.Module;
 import me.aidan.sydney.modules.RegisterModule;
+import me.aidan.sydney.modules.impl.core.RendersModule;
 import me.aidan.sydney.settings.impl.BooleanSetting;
 import me.aidan.sydney.settings.impl.NumberSetting;
 import me.aidan.sydney.utils.minecraft.HoleUtils;
@@ -43,7 +44,7 @@ public class HoleSnapModule extends Module {
 
         hole = holes.get(0).box();
 
-        if(mc.player.getX() == hole.getCenter().x && mc.player.getY() == hole.minY && mc.player.getZ() == hole.getCenter().z) {
+        if(isInHole()) {
             if(Sydney.MODULE_MANAGER.getModule(StepModule.class).isToggled()) Sydney.MODULE_MANAGER.getModule(StepModule.class).setToggled(false);
             if(Sydney.MODULE_MANAGER.getModule(SpeedModule.class).isToggled()) Sydney.MODULE_MANAGER.getModule(SpeedModule.class).setToggled(false);
             setToggled(false);
@@ -52,6 +53,29 @@ public class HoleSnapModule extends Module {
 
         MovementUtils.moveTowards(event, hole.getCenter(), MovementUtils.getPotionSpeed(MovementUtils.DEFAULT_SPEED));
     }
+
+    public static boolean isInHole() {
+        HoleSnapModule holeSnapModule = Sydney.MODULE_MANAGER.getModule(HoleSnapModule.class);
+        Box hole = holeSnapModule.hole;
+        if (mc.player == null || hole == null) return false;
+        double width = hole.maxX - hole.minX;
+        double depth = hole.maxZ - hole.minZ;
+        if (width <= 1.0 && depth <= 1.0) { // if we in a 1x1 hole, don't need to be in the center since anywhere in the hole is safe
+            double playerX = mc.player.getX();
+            double playerZ = mc.player.getZ();
+            return playerX >= hole.minX && playerX <= hole.maxX &&
+                    playerZ >= hole.minZ && playerZ <= hole.maxZ &&
+                    mc.player.getY() == hole.minY;
+        } else {
+            // otherwise we must be centered since that's when our hitbox blocks crystals
+            // TODO: add a small tolerance since our hitbox isn't a dot, we can still be safe even tho we're not at the exact center
+            return mc.player.getX() == hole.getCenter().x &&
+                    mc.player.getY() == hole.minY &&
+                    mc.player.getZ() == hole.getCenter().z;
+        }
+    }
+    // i made this method not knowing there's already one used for the LBY indicator that does this purpose but i'm not removing this bcs im proud of it lol
+
 
     private List<HoleUtils.Hole> getHoles() {
         List<HoleUtils.Hole> holes = new ArrayList<>();

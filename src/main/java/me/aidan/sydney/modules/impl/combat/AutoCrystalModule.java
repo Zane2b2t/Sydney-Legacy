@@ -651,10 +651,15 @@ public class AutoCrystalModule extends Module {
                     optimalPosition = position;
                     optimalPlayer = player;
                     optimalDamage = damage;
+                    if (damage > player.getHealth() + player.getAbsorptionAmount()) {
+                        override = true;
+                        break;
+                    }
                 }
             }
+            if (override) break;
         }
-
+        if (optimalPosition == null) return new PlaceTarget(null, null, obstructions, null, 0.0f, calculations);
         return new PlaceTarget(optimalPosition, optimalPlayer, obstructions, exception, optimalDamage, calculations);
     }
 

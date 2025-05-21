@@ -561,44 +561,52 @@ public class AutoCrystalModule extends Module {
         final boolean useRaytrace = raytrace.getValue();
         final Vec3d eyePos = mc.player.getEyePos();
         final boolean checkSuicide = !Sydney.MODULE_MANAGER.getModule(SuicideModule.class).isToggled();
+        final float maxSelfDamage = maximumSelfDamage.getValue().floatValue();
+        final float playerHealth = mc.player.getHealth() + mc.player.getAbsorptionAmount();
+        final boolean ignoreTer = ignoreTerrain.getValue();
+        final float lethalMult = lethalMultiplier.getValue().floatValue();
 
         EndCrystalEntity optimalCrystal = null;
         float optimalDamage = 0.0f;
 
-        for (EndCrystalEntity crystal : mc.world.getEntitiesByType(EntityType.END_CRYSTAL,
-                Box.from(eyePos).expand(attackRange.getValue().floatValue()), e -> true)) {
-            if (!crystal.isAlive() ||
-                    (inhibit.getValue() && attackedCrystals.containsKey(crystal.getId())) ||
-                    !mc.world.getWorldBorder().contains(crystal.getBlockPos())) continue;
+        List<EndCrystalEntity> validCrystals = mc.world.getEntitiesByType(
+                EntityType.END_CRYSTAL,
+                Box.from(eyePos).expand(attackRange.getValue().floatValue()),
+                crystal -> crystal.isAlive() &&
+                        !(inhibit.getValue() && attackedCrystals.containsKey(crystal.getId())) &&
+                        mc.world.getWorldBorder().contains(crystal.getBlockPos())
+        );
 
+        for (EndCrystalEntity crystal : validCrystals) {
             final double distSq = crystal.getBoundingBox().squaredMagnitude(eyePos);
             if (distSq > attackRangeSq) continue;
 
-            if (!WorldUtils.canSee(crystal) && (useRaytrace || distSq > attackWallsRangeSq)) continue;
+            final boolean canSee = WorldUtils.canSee(crystal);
+            if (!canSee && (useRaytrace || distSq > attackWallsRangeSq)) continue;
 
             if (checkSuicide) {
-                final float selfDamage = DamageUtils.getCrystalDamage(mc.player, null, crystal, ignoreTerrain.getValue());
-                if (selfDamage > maximumSelfDamage.getValue().floatValue() ||
-                        (antiSuicide.getValue() && selfDamage > mc.player.getHealth() + mc.player.getAbsorptionAmount())) {
+                final float selfDamage = DamageUtils.getCrystalDamage(mc.player, null, crystal, ignoreTer);
+                if (selfDamage > maxSelfDamage || (antiSuicide.getValue() && selfDamage > playerHealth)) {
                     continue;
                 }
             }
 
             for (PlayerEntity player : players) {
                 final Box extrapolatedPos = PositionUtils.extrapolate(player, extrapolation.getValue().intValue());
-                final float damage = DamageUtils.getCrystalDamage(player, extrapolatedPos, crystal, ignoreTerrain.getValue());
+                final float targetHealth = player.getHealth() + player.getAbsorptionAmount();
+                final float minDmg = getMinimumDamage(player, minimumDamage.getValue().floatValue());
 
-                if (damage < getMinimumDamage(player, minimumDamage.getValue().floatValue()) &&
-                        !(damage * (1.0f + lethalMultiplier.getValue().floatValue()) >= player.getHealth() + player.getAbsorptionAmount())) {
-                    continue;
+                final float damage = DamageUtils.getCrystalDamage(player, extrapolatedPos, crystal, ignoreTer);
+
+                if (damage > targetHealth) {
+                    return crystal;
                 }
 
-                if (damage > optimalDamage || damage > player.getHealth() + player.getAbsorptionAmount()) {
-                    optimalCrystal = crystal;
-                    optimalDamage = damage;
 
-                    if (damage > player.getHealth() + player.getAbsorptionAmount()) {
-                        return optimalCrystal;
+                if (damage >= minDmg || damage * (1.0f + lethalMult) >= targetHealth) {
+                    if (damage > optimalDamage) {
+                        optimalCrystal = crystal;
+                        optimalDamage = damage;
                     }
                 }
             }
@@ -610,9 +618,11 @@ public class AutoCrystalModule extends Module {
     private PlaceTarget calculatePlacements(BlockPos exception) {
         if (!place.getValue() || shouldPause("Place")) return null;
 
-        if ((autoSwitch.getValue().equals("None") || InventoryUtils.findHotbar(Items.END_CRYSTAL) == -1) &&
-                mc.player.getMainHandStack().getItem() != Items.END_CRYSTAL &&
-                mc.player.getOffHandStack().getItem() != Items.END_CRYSTAL) {
+
+        boolean hasCrystal = mc.player.getMainHandStack().getItem() == Items.END_CRYSTAL ||
+                mc.player.getOffHandStack().getItem() == Items.END_CRYSTAL;
+
+        if (!hasCrystal && (autoSwitch.getValue().equals("None") || InventoryUtils.findHotbar(Items.END_CRYSTAL) == -1)) {
             return null;
         }
 
@@ -624,6 +634,14 @@ public class AutoCrystalModule extends Module {
         final Vec3d playerPos = mc.player.getEyePos();
         final boolean checkSuicide = !Sydney.MODULE_MANAGER.getModule(SuicideModule.class).isToggled();
         final int radius = Sydney.WORLD_MANAGER.getRadius(Math.max(placeRange.getValue().floatValue(), placeWallsRange.getValue().floatValue()));
+        final boolean useRaytrace = raytrace.getValue();
+        final float maxSelfDamage = maximumSelfDamage.getValue().floatValue();
+        final float playerHealth = mc.player.getHealth() + mc.player.getAbsorptionAmount();
+        final boolean ignoreTer = ignoreTerrain.getValue();
+        final float lethalMult = lethalMultiplier.getValue().floatValue();
+        final int extrapolationValue = extrapolation.getValue().intValue();
+        final float minDamageValue = minimumDamage.getValue().floatValue();
+        final boolean isProtocolPlacement = placements.getValue().equalsIgnoreCase("Protocol");
 
         BlockPos optimalPosition = null;
         PlayerEntity optimalPlayer = null;
@@ -631,13 +649,24 @@ public class AutoCrystalModule extends Module {
         float optimalDamage = 0.0f;
         int calculations = 0;
 
+
         Map<PlayerEntity, Box> extrapolatedPositions = new HashMap<>(players.size());
         for (PlayerEntity player : players) {
-            extrapolatedPositions.put(player, PositionUtils.extrapolate(player, extrapolation.getValue().intValue()));
+            extrapolatedPositions.put(player, PositionUtils.extrapolate(player, extrapolationValue));
+        }
+
+
+        Map<PlayerEntity, Float> targetHealthMap = new HashMap<>(players.size());
+        Map<PlayerEntity, Float> minDamageMap = new HashMap<>(players.size());
+        for (PlayerEntity player : players) {
+            targetHealthMap.put(player, player.getHealth() + player.getAbsorptionAmount());
+            minDamageMap.put(player, getMinimumDamage(player, minDamageValue));
         }
 
         for (int i = 0; i < radius; i++) {
             BlockPos pos = mc.player.getBlockPos().add(Sydney.WORLD_MANAGER.getOffset(i));
+            calculations++;
+
 
             if (blacklistedBedrock.contains(pos) ||
                     !mc.world.getWorldBorder().contains(pos) ||
@@ -649,13 +678,13 @@ public class AutoCrystalModule extends Module {
             if (state.getBlock() != Blocks.BEDROCK && state.getBlock() != Blocks.OBSIDIAN) continue;
 
             if (!mc.world.getBlockState(pos.up()).isAir() ||
-                    (placements.getValue().equalsIgnoreCase("Protocol") && !mc.world.getBlockState(pos.up(2)).isAir())) {
+                    (isProtocolPlacement && !mc.world.getBlockState(pos.up(2)).isAir())) {
                 if (state.getBlock() == Blocks.BEDROCK) blacklistedBedrock.add(pos);
                 continue;
             }
 
-            if (!WorldUtils.canSee(pos) &&
-                    (raytrace.getValue() || playerPos.squaredDistanceTo(Vec3d.ofCenter(pos)) > placeWallsRangeSq)) {
+            boolean canSee = WorldUtils.canSee(pos);
+            if (!canSee && (useRaytrace || playerPos.squaredDistanceTo(Vec3d.ofCenter(pos)) > placeWallsRangeSq)) {
                 continue;
             }
 
@@ -669,44 +698,50 @@ public class AutoCrystalModule extends Module {
             }
             if (hasObstruction) continue;
 
+            // Only calculate self damage if we're checking suicide
             if (checkSuicide) {
-                float selfDamage = DamageUtils.getCrystalDamage(mc.player, null, pos, exception, ignoreTerrain.getValue());
-                if (selfDamage > maximumSelfDamage.getValue().floatValue() ||
-                        (antiSuicide.getValue() && selfDamage > mc.player.getHealth() + mc.player.getAbsorptionAmount())) {
+                float selfDamage = DamageUtils.getCrystalDamage(mc.player, null, pos, exception, ignoreTer);
+                if (selfDamage > maxSelfDamage || (antiSuicide.getValue() && selfDamage > playerHealth)) {
                     continue;
                 }
             }
 
+
+            //boolean foundValidTarget = false;
             for (PlayerEntity player : players) {
+                float targetHealth = targetHealthMap.get(player);
+                float minDmg = minDamageMap.get(player);
 
                 float damage = DamageUtils.getCrystalDamage(
                         player,
                         extrapolatedPositions.get(player),
                         pos,
                         exception,
-                        ignoreTerrain.getValue()
+                        ignoreTer
                 );
 
-                if (damage < getMinimumDamage(player, minimumDamage.getValue().floatValue()) &&
-                        !(damage * (1.0f + lethalMultiplier.getValue().floatValue()) >= player.getHealth() + player.getAbsorptionAmount())) {
-                    continue;
+                // Early lethal check
+                if (damage > targetHealth) {
+                    return new PlaceTarget(pos, player, obstructions, exception, damage, calculations);
                 }
 
-                if (damage > optimalDamage || damage > player.getHealth() + player.getAbsorptionAmount()) {
-                    optimalPosition = pos;
-                    optimalPlayer = player;
-                    optimalDamage = damage;
-
-                    if (damage > player.getHealth() + player.getAbsorptionAmount()) {
-                        return new PlaceTarget(pos, player, obstructions, exception, damage, calculations);
+                // Not lethal but still valid
+                if (damage >= minDmg || damage * (1.0f + lethalMult) >= targetHealth) {
+                    //foundValidTarget = true;
+                    if (damage > optimalDamage) {
+                        optimalPosition = pos;
+                        optimalPlayer = player;
+                        optimalDamage = damage;
                     }
                 }
             }
+
+
+           // if (!foundValidTarget) continue;
         }
 
         return new PlaceTarget(optimalPosition, optimalPlayer, obstructions, exception, optimalDamage, calculations);
     }
-
     private float[] calculateRotations(Vec3d vec3d) {
         float[] rotations = RotationUtils.getRotations(vec3d);
 

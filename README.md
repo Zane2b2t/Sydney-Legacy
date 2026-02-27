@@ -1,3 +1,13 @@
+Check releases for latest version
+
+
+
+
+
+
+
+
+
 config for those who need
 ![2025-02-10_23 13 49](https://github.com/user-attachments/assets/cc296b03-71be-4a93-8ac5-ea1bd6a5478a)
 
